@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 
@@ -80,3 +80,28 @@ class UserRepository:
             if device is None:
                 raise DeviceAlreadyOwned("Device already belongs to another user")
             return device
+
+    def get_device_readings(
+        self, user_id: int, start: datetime | None = None, end: datetime | None = None,
+    ) -> dict[str, list[dict[str, float]]]:
+        conditions = [Reading.device_id == Device.id]
+        if start is not None:
+            conditions.append(Reading.timestamp >= start)
+        if end is not None:
+            conditions.append(Reading.timestamp <= end)
+        query = (
+            select(Device.id.label("device_id"), Reading.id.label("reading_id"),
+                   Reading.x, Reading.y, Reading.z)
+            .outerjoin(Reading, and_(*conditions))
+            .where(Device.user_id == user_id)
+            .order_by(Device.id, Reading.id)
+        )
+        with self.database.session() as session:
+            if session.get(User, user_id) is None:
+                raise UserNotFound("User not found")
+            result: dict[str, list[dict[str, float]]] = {}
+            for row in session.execute(query).mappings():
+                readings = result.setdefault(row["device_id"], [])
+                if row["reading_id"] is not None:
+                    readings.append({axis: row[axis] for axis in ("x", "y", "z")})
+            return result

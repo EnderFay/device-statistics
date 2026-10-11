@@ -4,11 +4,16 @@ from fastapi import APIRouter, HTTPException, Path, Query
 from pydantic import AwareDatetime
 
 from app.errors import DeviceAlreadyOwned, DuplicateUsername, InvalidPeriod, UserNotFound
-from app.schemas import Analysis, Device, DeviceOwnerInput, Reading, ReadingInput, User, UserInput
+from app.schemas import (
+    Analysis, Device, DeviceOwnerInput, Reading, ReadingInput, User, UserAnalysis,
+    UserDeviceAnalysis, UserInput,
+)
 from app.services import ReadingService, UserService
 
 
 DeviceId = Annotated[str, Path(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")]
+StartTime = Annotated[AwareDatetime | None, Query(description="The beginning of the period inclusive, with the time zone.")]
+EndTime = Annotated[AwareDatetime | None, Query(description="The end of the period inclusive, with the time zone.")]
 
 
 def create_router(service: ReadingService, users: UserService) -> APIRouter:
@@ -25,8 +30,8 @@ def create_router(service: ReadingService, users: UserService) -> APIRouter:
     @router.get("/devices/{device_id}/statistics", response_model=Analysis, tags=["Statistics"])
     def statistics(
         device_id: DeviceId,
-        start: Annotated[AwareDatetime | None, Query(description="The beginning of the period inclusive, with the time zone.")] = None,
-        end: Annotated[AwareDatetime | None, Query(description="The end of the period inclusive, with the time zone.")] = None,
+        start: StartTime = None,
+        end: EndTime = None,
     ):
         try:
             return service.get_statistics(device_id, start, end)
@@ -62,5 +67,29 @@ def create_router(service: ReadingService, users: UserService) -> APIRouter:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except DeviceAlreadyOwned as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+
+    @router.get("/users/{user_id}/statistics", response_model=UserAnalysis, tags=["Statistics"],
+                summary="Aggregate statistics for all user devices")
+    def user_statistics(
+        user_id: Annotated[int, Path(gt=0)], start: StartTime = None, end: EndTime = None,
+    ):
+        try:
+            return users.get_statistics(user_id, start, end)
+        except UserNotFound as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except InvalidPeriod as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @router.get("/users/{user_id}/devices/statistics", response_model=UserDeviceAnalysis, tags=["Statistics"],
+                summary="Statistics for each user device")
+    def user_device_statistics(
+        user_id: Annotated[int, Path(gt=0)], start: StartTime = None, end: EndTime = None,
+    ):
+        try:
+            return users.get_device_statistics(user_id, start, end)
+        except UserNotFound as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except InvalidPeriod as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     return router

@@ -4,7 +4,10 @@ from statistics import median
 
 from app.errors import InvalidPeriod
 from app.repository import ReadingRepository, UserRepository
-from app.schemas import Analysis, Device, Metrics, Reading, ReadingInput, User, UserInput
+from app.schemas import (
+    Analysis, Device, Metrics, Reading, ReadingInput, User, UserAnalysis,
+    UserDeviceAnalysis, UserInput,
+)
 
 
 def summarize(values: list[float]) -> Metrics:
@@ -15,6 +18,15 @@ def summarize(values: list[float]) -> Metrics:
         sum=math.fsum(values),
         median=median(values) if values else None,
     )
+
+
+def validate_period(start: datetime | None, end: datetime | None) -> None:
+    if start is not None and end is not None and start > end:
+        raise InvalidPeriod("start must be less than or equal to end")
+
+
+def summarize_readings(rows: list[dict[str, float]]) -> dict[str, Metrics]:
+    return {axis: summarize([row[axis] for row in rows]) for axis in ("x", "y", "z")}
 
 
 class ReadingService:
@@ -36,14 +48,13 @@ class ReadingService:
     def get_statistics(
         self, device_id: str, start: datetime | None = None, end: datetime | None = None,
     ) -> Analysis:
-        if start is not None and end is not None and start > end:
-            raise InvalidPeriod("start must be less than or equal to end")
+        validate_period(start, end)
         rows = self.repository.get_readings(device_id, start, end)
         return Analysis(
             device_id=device_id,
             start=start.astimezone(timezone.utc) if start else None,
             end=end.astimezone(timezone.utc) if end else None,
-            **{axis: summarize([row[axis] for row in rows]) for axis in ("x", "y", "z")},
+            **summarize_readings(rows),
         )
 
 
@@ -62,3 +73,32 @@ class UserService:
 
     def assign_device(self, device_id: str, user_id: int) -> Device:
         return Device.model_validate(self.repository.assign_device(device_id, user_id))
+
+    def get_statistics(
+        self, user_id: int, start: datetime | None = None, end: datetime | None = None,
+    ) -> UserAnalysis:
+        validate_period(start, end)
+        grouped = self.repository.get_device_readings(user_id, start, end)
+        rows = [row for readings in grouped.values() for row in readings]
+        return UserAnalysis(
+            user_id=user_id,
+            start=start.astimezone(timezone.utc) if start else None,
+            end=end.astimezone(timezone.utc) if end else None,
+            **summarize_readings(rows),
+        )
+
+    def get_device_statistics(
+        self, user_id: int, start: datetime | None = None, end: datetime | None = None,
+    ) -> UserDeviceAnalysis:
+        validate_period(start, end)
+        grouped = self.repository.get_device_readings(user_id, start, end)
+        start_utc = start.astimezone(timezone.utc) if start else None
+        end_utc = end.astimezone(timezone.utc) if end else None
+        return UserDeviceAnalysis(
+            user_id=user_id, start=start_utc, end=end_utc,
+            devices=[
+                Analysis(device_id=device_id, start=start_utc, end=end_utc,
+                         **summarize_readings(rows))
+                for device_id, rows in grouped.items()
+            ],
+        )

@@ -28,7 +28,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
     app = FastAPI(
         title="Device Statistics API",
         description="Collecting device readings and analyzing each x, y, z coordinate.",
-        version="1.4.0",
+        version="1.4.1",
         lifespan=lifespan,
         openapi_tags=[
             {"name": "Users"},

@@ -41,6 +41,22 @@ class Analysis(BaseModel):
     z: Metrics
 
 
+class UserAnalysis(BaseModel):
+    user_id: int
+    start: datetime | None
+    end: datetime | None
+    x: Metrics
+    y: Metrics
+    z: Metrics
+
+
+class UserDeviceAnalysis(BaseModel):
+    user_id: int
+    start: datetime | None
+    end: datetime | None
+    devices: list[Analysis]
+
+
 class UserInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     username: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
