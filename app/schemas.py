@@ -39,3 +39,25 @@ class Analysis(BaseModel):
     x: Metrics
     y: Metrics
     z: Metrics
+
+
+class UserInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    username: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+
+
+class User(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+
+
+class DeviceOwnerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_id: int = Field(strict=True, gt=0)
+
+
+class Device(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    user_id: int | None
