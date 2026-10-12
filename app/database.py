@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, inspect, select
@@ -31,7 +31,7 @@ class Database:
         return self._engine
 
     @contextmanager
-    def session(self) -> Iterator[Session]:
+    def session(self) -> Generator[Session, None, None]:
         with Session(self.engine, expire_on_commit=False) as session:
             with session.begin():
                 yield session
@@ -39,7 +39,6 @@ class Database:
     def initialize(self) -> None:
         with self.engine.begin() as connection:
             Base.metadata.create_all(connection)
-            # Register devices from installations created before users were added.
             connection.execute(
                 insert(Device).from_select(["id"], select(Reading.device_id).distinct())
                 .on_conflict_do_nothing(index_elements=[Device.id])
